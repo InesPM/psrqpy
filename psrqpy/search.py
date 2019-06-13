@@ -2575,10 +2575,10 @@ class QueryATNF(object):
         return repr(self.table)
 
     def ppdot(self, intrinsicpdot=False, excludeGCs=False, showtypes=[],
-              showGCs=False, showSNRs=False, markertypes={}, deathline=True,
+              showGCs=False, showSNRs=False, showcdt=False, markertypes={}, deathline=True,
               deathmodel='Ip', filldeath=True, filldeathtype={}, showtau=True,
               brakingidx=3, tau=None, showB=True, Bfield=None, pdotlims=None,
-              periodlims=None, usecondition=True, rcparams={}):
+              periodlims=None, usecondition=True, rcparams={}, label=None, output=None):
         """
         Draw a lovely period vs period derivative diagram.
 
@@ -2598,6 +2598,8 @@ class QueryATNF(object):
                 clusters. Defaults to False.
             showSNRs (bool): show markers to denote the pulsars with supernova
                 remnants associated with them. Defaults to False.
+            showcdt (bool): show markers denoting the pulsars fulfilling the
+                provided conditions together with the other pulsars
             markertypes (dict): a dictionary of marker styles and colors keyed
                 to the pulsar types above
             deathline (bool): draw the pulsar death line. Defaults to True.
@@ -2626,6 +2628,8 @@ class QueryATNF(object):
                 Defaults to True.
             rcparams (dict): a dictionary of :py:obj:`matplotlib.rcParams`
                 setup parameters for the plot.
+            label (str): label for the queried sources if showcdt == True
+            output (str): path to the saved file
 
         Returns:
             :class:`matplotlib.figure.Figure`: the figure object
@@ -2666,6 +2670,22 @@ class QueryATNF(object):
                 del nshowtypes[nshowtypes.index(stype)]
             if 'SGR' == stype.upper():  # synonym for AXP
                 nshowtypes[nshowtypes.index(stype)] = 'AXP'
+            if 'other' == stype.upper():  # pulsars of interest
+                nshowtypes[nshowtypes.index(stype)] = 'OTH'
+
+        # show globular cluster pulsars
+        if showGCs and not excludeGCs:
+            nshowtypes.append('GC')
+
+        # show pulsars with associated supernova remnants
+        if showSNRs:
+            nshowtypes.append('SNR')
+
+        # show pulsars fulfilling condition condition
+        if showcdt :
+            nshowtypes.append('CDT')
+            table_cdt = self.query_table(usecondition=showcdt,
+                                        query_params=['P0', 'P1', 'P1_I', 'ASSOC', 'BINARY', 'TYPE'])
 
         # set plot parameters
         rcparams['figure.figsize'] = rcparams['figure.figsize'] if \
@@ -2679,9 +2699,9 @@ class QueryATNF(object):
         rcparams['axes.grid'] = rcparams['axes.grid'] if \
             'axes.grid' in rcparams else False
         rcparams['font.family'] = rcparams['font.family'] if \
-            'font.family' in rcparams else 'sans-serif'
-        rcparams['font.sans-serif'] = rcparams['font.sans-serif'] if \
-            'font.sans-serif' in rcparams else \
+            'font.family' in rcparams else 'serif'
+        rcparams['font.serif'] = rcparams['font.serif'] if \
+            'font.serif' in rcparams else \
             'Avant Garde, Helvetica, Computer Modern Sans serif'
         rcparams['font.size'] = rcparams['font.size'] if \
             'font.size' in rcparams else 20
@@ -2724,6 +2744,19 @@ class QueryATNF(object):
         if 'BINARY' in nshowtypes:
             binaries = binaries[pidx]  # binary pulsars
 
+        # extract periods and period derivatives for condition
+        if showcdt :
+            periods_cdt = table_cdt['P0']
+            pdots_cdt = table_cdt['P1']
+            if intrinsicpdot:  # use instrinsic period derivatives if requested
+                ipdotidx = np.isfinite(table_cdt['P1_I'])
+                pdots_cdt[ipdotidx] = table_cdt['P1_I'][ipdotidx]
+
+            # get only finite values, positive pdot
+            pidx_cdt = (np.isfinite(periods_cdt)) & (np.isfinite(pdots_cdt)) & (pdots_cdt > 0.)
+            periods_cdt = periods_cdt[pidx_cdt]
+            pdots_cdt = pdots_cdt[pidx_cdt]
+
         # check whether to exclude globular cluster pulsars that could have
         # contaminated spin-down value
         if excludeGCs:
@@ -2742,7 +2775,7 @@ class QueryATNF(object):
 
         # plot pulsars
         ax.loglog(periods, pdots, marker='.', color='dimgrey',
-                  linestyle='none')
+                  linestyle='none', markersize=3)
         ax.set_xlabel(r'Period (s)')
         ax.set_ylabel(r'Period Derivative')
 
@@ -2795,27 +2828,22 @@ class QueryATNF(object):
             'XINS' not in markertypes else markertypes['XINS']
         markertypes['GC'] = {'marker': '8', 'markeredgecolor': 'cyan'} if \
             'GC' not in markertypes else markertypes['GC']
-        markertypes['SNR'] = {'marker': '*', 'markeredgecolor': 'darkorchid'} if \
+        markertypes['SNR'] = {'marker': 'X', 'markeredgecolor': 'darkorchid'} if \
             'SNR' not in markertypes else markertypes['SNR']
+        markertypes['CDT'] = {'marker': '*', 'markeredgecolor': 'k'} if \
+            'CDT' not in markertypes else markertypes['CDT']
 
         # legend strings for different types
         typelegstring = {}
         typelegstring['AXP'] = r'SGR/AXP'
-        typelegstring['NRAD'] = r'"Radio-Quiet"'
-        typelegstring['XINS'] = r'Pulsed Thermal X-ray'
+        typelegstring['NRAD'] = r'Radio-Quiet'
+        typelegstring['XINS'] = r'XDINS'
         typelegstring['BINARY'] = r'Binary'
         typelegstring['HE'] = r'Radio-IR Emission'
         typelegstring['GC'] = r'Globular Cluster'
         typelegstring['SNR'] = r'SNR'
         typelegstring['RRAT'] = r'RRAT'
-
-        # show globular cluster pulsars
-        if showGCs and not excludeGCs:
-            nshowtypes.append('GC')
-
-        # show pulsars with associated supernova remnants
-        if showSNRs:
-            nshowtypes.append('SNR')
+        typelegstring['CDT'] = r'Other' if label == None else label
 
         handles = OrderedDict()
 
@@ -2829,6 +2857,10 @@ class QueryATNF(object):
                     typeidx = np.flatnonzero(
                         np.char.find(np.array(assocs.tolist(),
                                               dtype=np.str), thistype) != -1)
+                # elif thistype in ['CDT']:
+                #     typeidx = np.flatnonzero(
+                #         np.char.find(np.array(assocs.tolist(),
+                #                               dtype=np.str), thistype) != -1)
                 else:
                     typeidx = np.flatnonzero(
                         np.char.find(np.array(types.tolist(),
@@ -2852,6 +2884,23 @@ class QueryATNF(object):
 
                 ax.legend(handles.values(), handles.keys(), loc='upper left',
                           numpoints=1)
+
+            elif stype.upper() == 'CDT' :
+                thistype = stype.upper()
+                if 'markerfacecolor' not in markertypes[thistype]:
+                    markertypes[thistype]['markerfacecolor'] = 'none'
+                if 'linestyle' not in markertypes[thistype]:
+                    markertypes[thistype]['linestyle'] = 'none'
+                typehandle, = ax.loglog(periods_cdt, pdots_cdt,
+                                        label=typelegstring[thistype],
+                                        **markertypes[thistype])
+                if thistype in typelegstring:
+                    handles[typelegstring[thistype]] = typehandle
+                else:
+                    handles[thistype] = typehandle
+
+                ax.legend(handles.values(), handles.keys(), loc='upper left',
+                                      numpoints=1)
 
         # add characteristic age lines
         tlines = OrderedDict()
@@ -2901,6 +2950,10 @@ class QueryATNF(object):
 
         for l in Blines:
             _ = label_line(ax, Blines[l], l, color='k', fs=18, frachoffset=0.90)
+
+        # save the figure
+        if output is not None :
+            fig.savefig(output,  pad_inches=0, bbox_inches='tight')
 
         # return the figure
         return fig
