@@ -2777,7 +2777,7 @@ class QueryATNF(object):
         ax.loglog(periods, pdots, marker='.', color='dimgrey',
                   linestyle='none', markersize=3)
         ax.set_xlabel(r'Period (s)')
-        ax.set_ylabel(r'Period Derivative')
+        ax.set_ylabel(r'Period Derivative (s s$^{-1}$)')
 
         # get limits
         if periodlims is None:
